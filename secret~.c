@@ -135,32 +135,63 @@ void secret_dsp64(t_secret *x, t_object *dsp64, short *count, double samplerate,
 void secret_perform64(t_secret *x, t_object *dsp64, double **ins, long numins, double **outs, long numouts, long sampleframes, long flags, void *userparam)
 {
 
-//    double *inL = ins[0];  // Inlet
-//    double *outL = outs[0];  // Outlet
+////    double *inL = ins[0];  // Inlet
+////    double *outL = outs[0];  // Outlet
+////
+////
+//        for (long i = 0; i < sampleframes; i++) {
+//
+//            x->b_buffer[x->write_loc] = ins[0][i];// + (x->b_buffer[x->read_loc]) * x->feedback);
+//            outs[0][i] = x->b_buffer[x->read_loc] + ins[0][i];
 //
 //
-        for (long i = 0; i < sampleframes; i++) {
-
-            x->b_buffer[x->write_loc] = ins[0][i];// + (x->b_buffer[x->read_loc]) * x->feedback);
-            outs[0][i] = x->b_buffer[x->read_loc] + ins[0][i];
-
-
-            if(x->write_loc >= x->buffer_size){
-                x->write_loc = 0;
-            }
-            else{
-                (x->write_loc)++;
-
-            }
-            if(x->read_loc >= x->buffer_size){
-                x->read_loc = 0;
-            }
-            else{
-                (x->read_loc)++;
-            }
-
-        }
+//            if(x->write_loc >= x->buffer_size){
+//                x->write_loc = 0;
+//            }
+//            else{
+//                (x->write_loc)++;
+//
+//            }
+//            if(x->read_loc >= x->buffer_size){
+//                x->read_loc = 0;
+//            }
+//            else{
+//                (x->read_loc)++;
+//            }
+//
+//        }
     
+    
+        double *inL = ins[0];  // Inlet
+        double *outL = outs[0];  // Outlet
+        double n = sampleframes;
+    
+        while(n--){
+
+                x->b_buffer[x->write_loc] = *inL;
+                *outL = x->b_buffer[x->read_loc] + *inL;
+            
+                outL++;
+                inL++;
+
+
+                if(x->write_loc >= x->buffer_size){
+                    x->write_loc = 0;
+                }
+                else{
+                    (x->write_loc)++;
+
+                }
+                if(x->read_loc >= x->buffer_size){
+                    x->read_loc = 0;
+                }
+                else{
+                    (x->read_loc)++;
+                }
+            
+            
+
+            }
 
     
 }
