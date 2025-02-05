@@ -7,16 +7,21 @@
 Big Picuture
     - Make functional delay
     - Pitch shift individual delays from the feedback
-    - Make each feedback
+    - Stereo?
+    - Slowing it down to something atmospheric?
  
- test1
- test2
+TODO
+    - Inputs for feedback and delay time
+    - Pitch shift delays
+        -  First: Figure out pitch shifting
+        - Second: Write individual delays into new buffer?
 */
 
 #include "ext.h"			// standard Max include, always required (except in Jitter)
 #include "ext_obex.h"		// required for "new" style objects
 #include "z_dsp.h"			// required for MSP objects
-#include <ext_buffer.h>     // required for including buffers
+#include "ext_buffer.h"     // required for including buffers
+#include "math.h"
 
 
 
@@ -25,10 +30,12 @@ typedef struct _secret {
 	t_pxobject	ob;
     t_sample    * b_buffer;
     long        buffer_size;
-    long        sample_rate;;
     long        write_loc;
     long        read_loc;
     double      feedback;
+    float       b_sample_rate;
+    //long        delay_length;
+    
 } t_secret;
 
 
@@ -56,6 +63,7 @@ void ext_main(void *r)
 
 	class_register(CLASS_BOX, c);
 	secret_class = c;
+    
 }
 
 
@@ -70,15 +78,19 @@ void *secret_new(t_symbol *s, long argc, t_atom *argv)
 	}
     
     //Initializing the delay states
-    x->sample_rate = 44100; // can this be pulled organically?
+    x->b_sample_rate = sys_getsr();
+   // x->delay_length = 22050; // needs error checking to not be greater than buffer size or less than 0
     x->buffer_size = 44100;
     x->feedback = 0.5;
     x->write_loc = 0;
-    x->read_loc = x->write_loc - (x->sample_rate/2);
+    x->read_loc = x->write_loc - 22050; //(x->b_sample_rate/2);
     
     if(x->read_loc < 0){
         x->read_loc += x->buffer_size;
     }
+    
+    post("Buffer Sample Rate: %f", x->b_sample_rate);
+    
     
     x->b_buffer = (t_sample *)sysmem_newptr(x->buffer_size * sizeof(t_sample)); // allocating memory for the buffer with each new instance of secret
                                                                                 // it needs to be a pointer to a t_sample. sysmem_newptr is how to allocate memory for pointer in max systems --> the amount allocated needs to be the size of the buffer cut up into sample sizes (i.e. t_samples)
@@ -95,7 +107,6 @@ void *secret_new(t_symbol *s, long argc, t_atom *argv)
         post("buffer not found");
         return NULL;
         }
-        
     
 	return (x);
 }
@@ -122,8 +133,6 @@ void secret_assist(t_secret *x, void *b, long m, long a, char *s)
 	}
 }
 
-
-
 // registers a function for the signal chain in Max
 void secret_dsp64(t_secret *x, t_object *dsp64, short *count, double samplerate, long maxvectorsize, long flags)
 {
@@ -135,65 +144,32 @@ void secret_dsp64(t_secret *x, t_object *dsp64, short *count, double samplerate,
 void secret_perform64(t_secret *x, t_object *dsp64, double **ins, long numins, double **outs, long numouts, long sampleframes, long flags, void *userparam)
 {
 
-////    double *inL = ins[0];  // Inlet
-////    double *outL = outs[0];  // Outlet
-////
-////
-//        for (long i = 0; i < sampleframes; i++) {
-//
-//            x->b_buffer[x->write_loc] = ins[0][i];// + (x->b_buffer[x->read_loc]) * x->feedback);
-//            outs[0][i] = x->b_buffer[x->read_loc] + ins[0][i];
-//
-//
-//            if(x->write_loc >= x->buffer_size){
-//                x->write_loc = 0;
-//            }
-//            else{
-//                (x->write_loc)++;
-//
-//            }
-//            if(x->read_loc >= x->buffer_size){
-//                x->read_loc = 0;
-//            }
-//            else{
-//                (x->read_loc)++;
-//            }
-//
-//        }
+    double *inL = ins[0];  // Inlet
+    double *outL = outs[0];  // Outlet
+    long n = sampleframes;
     
-    
-        double *inL = ins[0];  // Inlet
-        double *outL = outs[0];  // Outlet
-        double n = sampleframes;
-    
-        while(n--){
-
-                x->b_buffer[x->write_loc] = *inL;
-                *outL = x->b_buffer[x->read_loc] + *inL;
+    while(n--){
+  
+            x->b_buffer[x->write_loc] = *inL + (x->b_buffer[x->read_loc] * x->feedback);
+            *outL = x->b_buffer[x->read_loc] ; // + *inL;
+            outL++;
+            inL++;
             
-                outL++;
-                inL++;
-
-
-                if(x->write_loc >= x->buffer_size){
-                    x->write_loc = 0;
-                }
-                else{
-                    (x->write_loc)++;
-
-                }
-                if(x->read_loc >= x->buffer_size){
-                    x->read_loc = 0;
-                }
-                else{
-                    (x->read_loc)++;
-                }
-            
-            
-
+            if(x->write_loc >= x->buffer_size){
+                x->write_loc = 0;
             }
-
-    
+            else{
+                (x->write_loc)++;
+            }
+            if(x->read_loc >= x->buffer_size){
+                x->read_loc = 0;
+            }
+            else{
+                (x->read_loc)++;
+            }
+    }
+        
 }
+    
     
 
