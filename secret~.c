@@ -25,6 +25,7 @@ TODO
 
 
 
+
 // struct to represent the object's state
 typedef struct _secret {
 	t_pxobject	ob;
@@ -34,6 +35,24 @@ typedef struct _secret {
     long        read_loc;
     double      feedback;
     float       b_sample_rate;
+    
+    
+    t_sample    * b_buffer_high;
+    long        buffer_size_high;
+    long        write_loc_high;
+    long        read_loc_high;
+    double      feedback_high;
+    float       b_sample_rate_high;
+    
+    t_sample    * b_buffer_low;
+    long        buffer_size_low;
+    long        write_loc_low;
+    long        read_loc_low;
+    double      feedback_low;
+    float       b_sample_rate_low;
+    
+    
+    
     //long        delay_length;
     
 } t_secret;
@@ -45,6 +64,10 @@ void secret_free(t_secret *x);
 void secret_assist(t_secret *x, void *b, long m, long a, char *s);
 void secret_dsp64(t_secret *x, t_object *dsp64, short *count, double samplerate, long maxvectorsize, long flags);
 void secret_perform64(t_secret *x, t_object *dsp64, double **ins, long numins, double **outs, long numouts, long sampleframes, long flags, void *userparam);
+double normal_delay (t_secret *x, double *inL, long n);
+double high_pitch (t_secret *x, double *inL, long n);
+double low_pitch(t_secret *x, double *inL, long n);
+double random_tones(t_secret *x, double *inL, long n);
 
 
 // global class pointer variable
@@ -77,24 +100,19 @@ void *secret_new(t_symbol *s, long argc, t_atom *argv)
         post("dsp set up properly");
 	}
     
-    //Initializing the delay states
+//Initializing delay buffer
     x->b_sample_rate = sys_getsr();
    // x->delay_length = 22050; // needs error checking to not be greater than buffer size or less than 0
-    x->buffer_size = 44100;
-    x->feedback = 0.5;
+    x->buffer_size = 44100*5;
+    x->feedback = 0.9;
     x->write_loc = 0;
-    x->read_loc = x->write_loc - 22050; //(x->b_sample_rate/2);
+    x->read_loc = x->write_loc - 44100*4.7; //(x->b_sample_rate/2);
     
     if(x->read_loc < 0){
         x->read_loc += x->buffer_size;
     }
     
-    post("Buffer Sample Rate: %f", x->b_sample_rate);
-    
-    
-    x->b_buffer = (t_sample *)sysmem_newptr(x->buffer_size * sizeof(t_sample)); // allocating memory for the buffer with each new instance of secret
-                                                                                // it needs to be a pointer to a t_sample. sysmem_newptr is how to allocate memory for pointer in max systems --> the amount allocated needs to be the size of the buffer cut up into sample sizes (i.e. t_samples)
-                                                                                //THIS DYNAMICALLY ALLOCATES MEMORY TO A POINTER...WHICH WE ARE GOING TO TREAT LIKE AN ARRAY
+    x->b_buffer = (t_sample *)sysmem_newptr(x->buffer_size * sizeof(t_sample));
     
     if(x->b_buffer){
         for (int i=0; i < x->buffer_size; i++){
@@ -106,6 +124,66 @@ void *secret_new(t_symbol *s, long argc, t_atom *argv)
         object_free(x);
         post("buffer not found");
         return NULL;
+        }
+    
+
+//Initializing high buffer
+    x->b_sample_rate_high = sys_getsr();
+    x->buffer_size_high = 44100*10;
+    x->feedback_high = 0.999;
+    x->write_loc_high = 0;
+    x->read_loc_high = x->write_loc_high - 44099*10;
+    
+    if(x->read_loc_high < 0){
+        x->read_loc_high += x->buffer_size_high;
+    }
+
+    x->b_buffer_high = (t_sample *)sysmem_newptr(x->buffer_size_high * sizeof(t_sample));
+ 
+    
+    if(x->b_buffer_high){
+        for (int i=0; i < x->buffer_size_high; i++){
+            x->b_buffer_high[i] = 0.0;
+        }
+    }
+    
+    if (x->b_buffer_high == NULL) {  //error checking to make sure buffer was made
+        object_free(x);
+        post("buffer not found");
+        return NULL;
+        }
+    else{
+        post("high buffer created");
+    }
+    
+    
+//Initializing low buffer
+        x->b_sample_rate_low = sys_getsr();
+        x->buffer_size_low = 44100*10;
+        x->feedback_low = 0.999;
+        x->write_loc_low = 0;
+        x->read_loc_low = x->write_loc_low - 44099*10;
+        
+        if(x->read_loc_low < 0){
+            x->read_loc_low += x->buffer_size_low;
+        }
+
+        x->b_buffer_low = (t_sample *)sysmem_newptr(x->buffer_size_low * sizeof(t_sample));
+     
+        
+        if(x->b_buffer_low){
+            for (int i=0; i < x->buffer_size_low; i++){
+                x->b_buffer_low[i] = 0.0;
+            }
+        }
+        
+        if (x->b_buffer_low == NULL) {  //error checking to make sure buffer was made
+            object_free(x);
+            post("buffer not found");
+            return NULL;
+            }
+        else{
+            post("low buffer created");
         }
     
 	return (x);
@@ -144,32 +222,219 @@ void secret_dsp64(t_secret *x, t_object *dsp64, short *count, double samplerate,
 void secret_perform64(t_secret *x, t_object *dsp64, double **ins, long numins, double **outs, long numouts, long sampleframes, long flags, void *userparam)
 {
 
+//    double *inL = ins[0];  // Inlet
+//    double *outL = outs[0];  // Outlet
+//    long n = sampleframes;
+//
+//    while(n--){
+//
+//            x->b_buffer[x->write_loc] = *inL + (x->b_buffer[x->read_loc] * x->feedback);
+//            *outL = x->b_buffer[x->read_loc] ; // + *inL;
+//            outL++;
+//            inL++;
+//
+//            if(x->write_loc >= x->buffer_size){
+//                x->write_loc = 0;
+//            }
+//            else{
+//                (x->write_loc)++;
+//            }
+//            if(x->read_loc >= x->buffer_size){
+//                x->read_loc = 0;
+//            }
+//            else{
+//                (x->read_loc)++;
+//            }
+//    }
+    
+//double *inL = ins[0];  // Inlet
+//double *outL = outs[0];  // Outlet
+//long n = sampleframes;
+//
+//
+//    while(n--){
+//
+//        x->b_buffer[(x->write_loc)] = *inL;// + (x->b_buffer[x->read_loc] * x->feedback);
+////        x->b_buffer[(x->write_loc)+1] = *inL + (x->b_buffer[x->read_loc+1] * x->feedback);
+//
+//            if((x->write_loc) >= x->buffer_size){
+//                (x->write_loc) = 0;
+//            }
+//            else{
+//                (x->write_loc)++;
+//            }
+//
+//        x->b_buffer[(x->write_loc)] = *inL;// + (x->b_buffer[x->read_loc] * x->feedback);
+//
+//
+//            if((x->write_loc) >= x->buffer_size){
+//                (x->write_loc) = 0;
+//            }
+//            else{
+//                (x->write_loc)++;
+//            }
+//
+//        *outL = x->b_buffer[x->read_loc] ; // + *inL;
+//        outL++;
+//        inL++;
+//
+//
+//            if(x->read_loc >= x->buffer_size){
+//                x->read_loc = 0;
+//            }
+//            else{
+//                (x->read_loc)++;
+//            }
+//    }
+
+    
+//high pitch
+    
+//        double *inL = ins[0];  // Inlet
+//        double *outL = outs[0];  // Outlet
+//        long n = sampleframes;
+//
+//        while(n--){
+//
+//                x->b_buffer[x->write_loc] = *inL + (x->b_buffer[x->read_loc] * x->feedback);
+//                *outL = x->b_buffer[x->read_loc] ; // + *inL;
+//                outL++;
+//                inL++;
+//
+//                if(x->write_loc >= x->buffer_size){
+//                    x->write_loc = 0;
+//                }
+//                else{
+//                    (x->write_loc)++;
+//                }
+//                if(x->read_loc >= x->buffer_size){
+//                    x->read_loc = 0;
+//                }
+//                else{
+//                    (x->read_loc)+=2;
+//                }
+//        }
+    
     double *inL = ins[0];  // Inlet
     double *outL = outs[0];  // Outlet
     long n = sampleframes;
-    
-    while(n--){
-  
-            x->b_buffer[x->write_loc] = *inL + (x->b_buffer[x->read_loc] * x->feedback);
-            *outL = x->b_buffer[x->read_loc] ; // + *inL;
-            outL++;
-            inL++;
-            
-            if(x->write_loc >= x->buffer_size){
-                x->write_loc = 0;
-            }
-            else{
-                (x->write_loc)++;
-            }
-            if(x->read_loc >= x->buffer_size){
-                x->read_loc = 0;
-            }
-            else{
-                (x->read_loc)++;
-            }
-    }
-        
-}
-    
-    
 
+    while(n--){
+
+//        *outL = normal_delay(x, inL, n) + high_pitch(x, inL, n) + low_pitch(x, inL, n);
+        
+        normal_delay(x, inL, n);
+        
+
+        *outL = low_pitch(x, inL, n) + random_tones(x, inL, n);
+
+        outL++;
+        inL++;
+
+    }
+    
+}
+
+double normal_delay (t_secret *x, double *inL, long n)
+{
+    x->b_buffer[x->write_loc] = *inL + (x->b_buffer[x->read_loc] * x->feedback);
+
+        if(x->write_loc >= x->buffer_size){
+            x->write_loc = 0;
+        }
+        else{
+            (x->write_loc)++;
+        }
+        if(x->read_loc >= x->buffer_size){
+            x->read_loc = 0;
+        }
+        else{
+            (x->read_loc)++;
+        }
+
+    return (x->b_buffer[x->read_loc]);
+}
+
+
+double high_pitch (t_secret *x, double *inL, long n)
+{
+    x->b_buffer_high[x->write_loc_high] = *inL + (x->b_buffer_high[x->read_loc_high] * x->feedback_high);
+    
+        if(x->write_loc_high >= x->buffer_size_high){
+            x->write_loc_high = 0;
+        }
+        else{
+            (x->write_loc_high)++;
+        }
+        if(x->read_loc_high >= x->buffer_size_high){
+            x->read_loc_high = 0;
+        }
+        else{
+            (x->read_loc_high)+=2;
+        }
+    
+    return (x->b_buffer_high[x->read_loc_high]);
+}
+
+
+double low_pitch(t_secret *x, double *inL, long n){
+
+
+    x->b_buffer_low[(x->write_loc_low)] = *inL + (x->b_buffer[x->read_loc_low] * x->feedback_low);
+    //        x->b_buffer[(x->write_loc)+1] = *inL + (x->b_buffer_low[x->read_loc+1] * x->feedback);
+
+//        if((x->write_loc_low) >= x->buffer_size_low){
+//            (x->write_loc_low) = 0;
+//        }
+//        else{
+//            (x->write_loc_low)++;
+//        }
+    
+    if((x->write_loc_low) < x->buffer_size_low){
+        (x->write_loc_low)++;
+    }
+    else{
+        x->write_loc_low = x->buffer_size_low;
+    }
+
+    x->b_buffer_low[(x->write_loc_low)] = *inL + (x->b_buffer_low[x->read_loc_low] * x->feedback_low);
+
+//
+//        if((x->write_loc_low) >= x->buffer_size_low){
+//            (x->write_loc_low) = 0;
+//        }
+//        else{
+//            (x->write_loc_low)++;
+//        }
+    
+    
+    if((x->write_loc_low) < x->buffer_size_low){
+        (x->write_loc_low)++;
+    }
+    else{
+        x->write_loc_low = x->buffer_size_low;
+    }
+
+
+        if(x->read_loc_low >= x->buffer_size_low){
+            x->read_loc_low = 0;
+        }
+        else{
+            (x->read_loc_low)++;
+        }
+
+    return (x->b_buffer_low[x->read_loc_low]);
+}
+
+
+
+double random_tones(t_secret *x, double *inL, long n)
+{
+    int random_buffer_loc = rand() % (x->buffer_size + 1);
+    
+    for(int i = 0; i < 1000; i++){
+        random_buffer_loc++;
+    }
+    
+    return (x->b_buffer[random_buffer_loc]);
+}
