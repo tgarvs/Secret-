@@ -2,19 +2,14 @@
     @file secret~
     @brief a delay effect
     @author Thomas Garvey
-    @version 1.0
- 
-Big Picuture
-    - Make functional delay
-    - Pitch shift individual delays from the feedback
-    - Stereo?
-    - Slowing it down to something atmospheric?
+    @version 2.0
  
 TODO
-    - Inputs for feedback and delay time
-    - Pitch shift delays
-        -  First: Figure out pitch shifting
-        - Second: Write individual delays into new buffer?
+    - Inputs for feedback and delay time and activation of delay elements
+    - Keep messed up high pitch or "fix" it? --> how can I fully fix it?
+    - add flutter delay
+    - Add boolean switch to allow feedback for low_pitch
+    - write current output into final buffer and reoutput --> crazy feedback? Cool atmosphere?
 */
 
 #include "ext.h"			// standard Max include, always required (except in Jitter)
@@ -50,6 +45,7 @@ typedef struct _secret {
     long        read_loc_low;
     double      feedback_low;
     float       b_sample_rate_low;
+    Boolean     switch_low;
     
     
     
@@ -163,6 +159,7 @@ void *secret_new(t_symbol *s, long argc, t_atom *argv)
         x->feedback_low = 0.999;
         x->write_loc_low = 0;
         x->read_loc_low = x->write_loc_low - 44099*10;
+        x->switch_low = true;
         
         if(x->read_loc_low < 0){
             x->read_loc_low += x->buffer_size_low;
@@ -323,10 +320,10 @@ void secret_perform64(t_secret *x, t_object *dsp64, double **ins, long numins, d
 
 //        *outL = normal_delay(x, inL, n) + high_pitch(x, inL, n) + low_pitch(x, inL, n);
         
-        normal_delay(x, inL, n);
+//        normal_delay(x, inL, n);
         
 
-        *outL = low_pitch(x, inL, n) + random_tones(x, inL, n);
+        *outL = high_pitch(x, inL, n); //low_pitch(x, inL, n) + random_tones(x, inL, n);
 
         outL++;
         inL++;
@@ -366,6 +363,7 @@ double high_pitch (t_secret *x, double *inL, long n)
         else{
             (x->write_loc_high)++;
         }
+    
         if(x->read_loc_high >= x->buffer_size_high){
             x->read_loc_high = 0;
         }
@@ -373,15 +371,21 @@ double high_pitch (t_secret *x, double *inL, long n)
             (x->read_loc_high)+=2;
         }
     
+// Fixes decay into noise --> potential for granulation here with random function
+    if(x->read_loc_high == x->write_loc_high){
+        x->write_loc_high++;// = rand() % (x->buffer_size + 1);
+    }
+    
     return (x->b_buffer_high[x->read_loc_high]);
 }
 
 
 double low_pitch(t_secret *x, double *inL, long n){
 
+//TODO: ADD BOOLEAN SWITCH
+
 
     x->b_buffer_low[(x->write_loc_low)] = *inL + (x->b_buffer[x->read_loc_low] * x->feedback_low);
-    //        x->b_buffer[(x->write_loc)+1] = *inL + (x->b_buffer_low[x->read_loc+1] * x->feedback);
 
 //        if((x->write_loc_low) >= x->buffer_size_low){
 //            (x->write_loc_low) = 0;
@@ -427,14 +431,14 @@ double low_pitch(t_secret *x, double *inL, long n){
 }
 
 
-
-double random_tones(t_secret *x, double *inL, long n)
-{
-    int random_buffer_loc = rand() % (x->buffer_size + 1);
-    
-    for(int i = 0; i < 1000; i++){
-        random_buffer_loc++;
-    }
-    
-    return (x->b_buffer[random_buffer_loc]);
-}
+//
+//double random_tones(t_secret *x, double *inL, long n)
+//{
+//    int random_buffer_loc = rand() % (x->buffer_size + 1);
+//
+//    for(int i = 0; i < 1000; i++){
+//        random_buffer_loc++;
+//    }
+//
+//    return (x->b_buffer[random_buffer_loc]);
+//}
