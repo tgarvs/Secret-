@@ -534,15 +534,16 @@ double random_tones_offset(t_secret *x, double inL, long n)
 
 
 /*
- @brief:
- @params:
- @return:
+ @brief: Input from second inlet (first Max inlet)
  */
 void secret_in3 (t_secret *x, long q)
 {
     x->grain_size = q;
 }
 
+/*
+ @brief: Input from second inlet (first Max inlet)
+ */
 void secret_in2 (t_secret *x, long q)
 {
     x->grain_size_two = q;
